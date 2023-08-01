@@ -1,7 +1,6 @@
 import time
-
 from common.interface import OkexRequest
-from data.data_value import data_value, currency_strategy, time_date, set_data
+from data.data_value import data_value, currency_strategy, time_date, set_data, get_data, del_data, update_data
 
 
 class OkexStrategy:
@@ -22,6 +21,8 @@ class OkexStrategy:
         self.base_money = base_money
         self.lis_create_order = []  # 用于存储挡位信息
         self.lis_order = lis_order  # 存储未完成的订单列表（放订单ID）
+        self.add_order_dic = {}
+        self.xx = []
 
     def create_order(self):  # 创建订单（挂单）       currency_strategy 返回单价 0  币的个数 1  卖出总币 2  索引 3
         self.lis_create_order = currency_strategy(self.rate, self.buy_money, self.base_money)
@@ -57,17 +58,85 @@ class OkexStrategy:
 
         print(f" 单号 {self.lis_order}")
 
+    def infinite_order_trade(self, key):  # 无限网格
+        print('无限网格')
+        temp = get_data()
+        if key > max(self.lis_order) - 30:  # 更改挡位信息
+            y = int(temp[6]) + 1
+            update_data('symbol', 'abc_id', str(y))
+            self.lis_create_order = currency_strategy(self.rate, self.buy_money, self.base_money, 1)
+            print(self.lis_order)
+            print(self.lis_create_order)
+
+            keys = self.lis_create_order[3]
+            values1 = self.lis_create_order[0]
+            values2 = self.lis_create_order[1]
+
+            price_dic = dict(zip(keys, values1))
+            quantity_dic = dict(zip(keys, values2))
+            print(price_dic)
+            print(quantity_dic)
+
+            x_max = max(self.lis_order)  # 60   61
+            x_min = min(self.lis_order)  # 0   1
+            order = self.lis_order.get(x_min)
+            self.login_request.revoke_order(order)  # 系统取消最上一个订单
+            while True:
+                money = self.login_request.get_trade()
+                if money[0]['data'][0]['side'] == 'buy':
+                    break
+            print(money)
+            response_buy = self.login_request.buy(price=money[0]['data'][0]['px'],
+                                                  quantity=quantity_dic[x_max],
+                                                  order_type="LIMIT")  # 购买币
+            print(f" 挡位{key}买入,价格 {price_dic[key]}"
+                  f" 数量 {quantity_dic[x_max]}")
+            print(f"response_buy: {response_buy}")
+
+            order_response = self.login_request.get_order_status(response_buy[0])
+            response = self.login_request.sell(price=price_dic[x_max + 1],
+                                               quantity=quantity_dic[x_max] + float(order_response[0]['data'][0]['fee']),
+                                               order_type="LIMIT")  # 卖出（最后增加一个订单）
+            print(f" 挡位{x_max + 1}挂卖出, 单号为{response[0]}, 价格 {price_dic[x_max + 1]}"
+                  f" 数量 {quantity_dic[x_max]}")
+            print(response)
+
+            self.lis_order.pop(x_min)
+            self.lis_order.setdefault(x_max + 1, response[0])  # 字典中增加订单
+            print(self.lis_order)
+
+            del_data(str(x_min))  # ini中删除最上一个      1
+            set_data(x_max + 1, response[0])  # ini中增加订单   62
+
+            update_top = int(temp[4]) - 1
+            update_end = int(temp[5]) + 1
+            update_data('symbol', 'top', str(update_top))  # ini中更改top和end
+            update_data('symbol', 'end', str(update_end))
+
     def order_trade(self):  # 订单交易：查询订单状态，如果为完全成交，生成新的订单
-        # self.lis_create_order = currency_strategy(self.rate, self.buy_money, self.base_money)
-        for key in self.lis_order:
+        self.lis_create_order = currency_strategy(self.rate, self.buy_money, self.base_money)
+        keys = self.lis_create_order[3]
+        values1 = self.lis_create_order[0]
+        values2 = self.lis_create_order[1]
+        price_dic = dict(zip(keys, values1))
+        quantity_dic = dict(zip(keys, values2))
+        print(price_dic)
+        print(quantity_dic)
+        # price = price_dic[key]
+        # quantity = quantity_dic[key]
+
+        temp = [key for key in self.lis_order]
+        print(temp)
+        for key in temp:
             try:
                 values = self.lis_order[key]
+                print(values)
                 if values != 'null':
                     order_response = self.login_request.get_order_status(values)
                     print(
                         f"挡位：{key} -----{order_response[0]['data'][0]['state']}--"
                         f"{order_response[0]['data'][0]['side']}---{self.lis_order[key]} ")
-                    time.sleep(2)
+                    time.sleep(1)
 
                     if order_response[0]['data'][0]['state'] == 'filled':
                         # 防止跌得太快，跳级买，造成卖的下一个（还是买）不为空（卖的下一个应该为none）
@@ -75,38 +144,51 @@ class OkexStrategy:
                         # pre_value = self.lis_order[key - 1]
                         # 防止涨得太快，跳级卖,造成买的上一个（还是卖）不为空 （买的上一个应该为none）
                         if order_response[0]['data'][0]['side'] == 'buy' and self.lis_order[key + 1] == 'null':  # 创建订单
+
                             response = self.login_request.sell(
-                                price=self.lis_create_order[0][key + 1],
-                                quantity=self.lis_create_order[1][key] + float(order_response[0]['data'][0]['fee']),
+                                price=price_dic[key + 1],  # 有问题，将价格数量放入字典取值
+                                quantity=quantity_dic[key] + float(order_response[0]['data'][0]['fee']),
                                 order_type="LIMIT"
                             )
 
                             self.lis_order.update({key: 'null'})
                             self.lis_order.update({key + 1: response[0]})
 
-                            print(f"挡位：{key} buy成功  索引：{key + 1} 挂卖出, 单号为{response[0]},"
-                                  f"价格 {self.lis_create_order[0][key + 1]}"
-                                  f" 数量 {self.lis_create_order[1][key]}"
-                                  f" fee {order_response[0]['data'][0]['fee']}")
+                            with open(file=r"./log/Transaction_information.log", mode='a', encoding='utf8') as file:
+                                str_log = (
+                                    f"挡位：{key} buy成功  索引：{key + 1} 挂卖出, 单号为{response[0]},"
+                                    f"价格 {price_dic[key + 1]}"
+                                    f" 数量 {quantity_dic[key]}"
+                                    f" fee {order_response[0]['data'][0]['fee']}\n\n")
+                                file.write(str_log)
+                            print(str_log)
+
                             set_data(key, 'null')
                             set_data(key + 1, response[0])
 
                         elif order_response[0]['data'][0]['side'] == 'sell' and self.lis_order[key - 1] == 'null':
 
                             response = self.login_request.buy(
-                                price=self.lis_create_order[0][key - 1],
-                                quantity=self.lis_create_order[1][key - 1],
+                                price=price_dic[key - 1],
+                                quantity=quantity_dic[key - 1],
                                 order_type="LIMIT"
                             )
 
                             self.lis_order.update({key: 'null'})
                             self.lis_order.update({key - 1: response[0]})
 
-                            print(f"挡位：{key} sell成功  索引：{key - 1} 挂买入, 单号为{response[0]},"
-                                  f"价格 {self.lis_create_order[0][key - 1]}"
-                                  f" 数量 {self.lis_create_order[1][key - 1]}")
+                            with open(file=r"./log/Transaction_information.log", mode='a', encoding='utf8') as file:
+                                str_log = (
+                                    f"挡位：{key} sell成功  索引：{key - 1} 挂买入, 单号为{response[0]},"
+                                    f"价格 {price_dic[key - 1]}"
+                                    f" 数量 {quantity_dic[key - 1]}\n\n")
+                                file.write(str_log)
+                            print(str_log)
+
                             set_data(key, 'null')
                             set_data(key - 1, response[0])
+
+                            self.infinite_order_trade(key)
 
             except BaseException as Argument:
                 with open(file=r"./log/error.log", mode='a', encoding='utf8') as file:

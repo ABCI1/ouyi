@@ -14,13 +14,12 @@ from urllib.parse import urljoin
 class OkexRequest:
     """OKEX Spot REST API client."""
 
-    def __init__(self, symbol, access_key, secret_key, passphrase, flag=None, host=None, proxies=None):
+    def __init__(self, symbol, access_key, secret_key, passphrase, flag=None, host=None):
         """
         :param flag: 0 表示实时交易，1 表示模拟交易
         :param access_key: access_key的值\
         :param secret_key: secret_key的值
         :param passphrase: 密码
-        :param proxies: 使用VPN时，传入代理地址
         """
         self.flag = flag
         self.symbol = symbol
@@ -28,7 +27,6 @@ class OkexRequest:
         self._access_key = access_key
         self._secret_key = secret_key
         self._passphrase = passphrase
-        self.proxies = proxies
 
     def api_request(self, method, uri, params=None, body=None, headers=None, auth=False):
         """
@@ -73,7 +71,7 @@ class OkexRequest:
             headers["OK-ACCESS-PASSPHRASE"] = self._passphrase
             headers["x-simulated-trading"] = self.flag
         result = requests.request(
-            method, url, data=body, headers=headers, proxies=self.proxies, timeout=50
+            method, url, data=body, headers=headers, timeout=500
         ).json()
         if result.get("code") and result.get("code") != "0":
             return None, result

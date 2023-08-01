@@ -2,16 +2,33 @@ import configparser
 import os
 import time
 
+conf = configparser.ConfigParser()  # 类的实例化
+cul_path = os.path.dirname(os.path.realpath(__file__))
+path = os.path.join(cul_path, 'data.ini')
+conf.read(path, encoding="utf-8")
+if not os.path.exists(path):
+    # 如果配置文件不存在，则创建一个新的配置文件
+    with open(path, 'w', encoding="utf-8") as config_file:
+        config_file.write('')
+
+conf.read(path, encoding="utf-8")  # 读取配置文件
+
+if 'symbol-orderid' not in conf:
+    # 如果节不存在，则添加节
+    conf.add_section('symbol-orderid')
+
+with open(path, 'w', encoding="utf-8") as config_file:
+    conf.write(config_file)  # 保存数据
+
 
 def data_value():
     data_values = {
         'flag': '1',
-        'symbol': 'OKB-USDT',
+        'symbol': conf['login']['symbol'],
         'url': "https://www.ouyicn.blue/",
-        'proxies': None,
-        'api_keys': 'd231677e-8631-4f55-a213-dc64a62eeed5',
-        'secret_keys': 'B97D9A2F6A2AC59B77A688D99BE28BDF',
-        'passphrase': "19980620MJQmjq,./",
+        'api_keys': conf['login']['api_keys'],
+        'secret_keys': conf['login']['secret_keys'],
+        'passphrase': conf['login']['passphrase'],
     }
     return data_values
 
@@ -23,32 +40,30 @@ def time_date():
     return other_style_time
 
 
-def currency_strategy(rate, buy_money, base_money, current_money=None):
+def currency_strategy(rate, buy_money, base_money, abc=0):
     """
+    :param abc:
     :param rate:
-    :param buy_money: 购买总金额
+    :param buy_money: 购买金额
     :param base_money: 0挡位的价格
     :param current_money: 当前价格
     :return: 返回列表 [购买价格、购买个数、0挡位之后的价格总计]
     """
-    conf = configparser.ConfigParser()  # 类的实例化
-    cul_path = os.path.dirname(os.path.realpath(__file__))
-    path = os.path.join(cul_path, 'data.ini')
-    conf.read(path, encoding="utf-8")
-    top = int(conf['okb-usdt']['top'])
-    end = int(conf['okb-usdt']['end'])
+    top = int(conf['symbol']['top'])
+    end = int(conf['symbol']['end'])
+    abc_id = int(conf['symbol']['abc_id'])
 
     lis_A, lis_C, lis_E = [], [], []
     coin_sum = 0
     E = 0
-    D = buy_money / top + end
-    for i in range(0, top + end):
+
+    for i in range(abc_id, top + end + abc_id):
         lis_A.append(i)
-    for level in range(-top, end):
+    for level in range(-top + abc, end + abc):
         A = level
         B = (rate ** A) * 100
         C = (rate ** A) * base_money
-        D = D
+        D = buy_money
         E = D / C
         F = E * C if A <= 0 else E * base_money
         if A >= 0:
@@ -56,9 +71,6 @@ def currency_strategy(rate, buy_money, base_money, current_money=None):
 
         lis_C.append(C)
         lis_E.append(E)
-        with open(file=r"./data/档位.csv", mode='a', encoding='utf8') as file:
-            str_log = f"{A}, {B}, {C}, {D}, {E}, {F}\n"
-            file.write(str_log)
 
     coin_sum = coin_sum - E
     lis = [lis_C, lis_E, coin_sum, lis_A]  # 购买价格、购买个数、0挡位之后币的数量总和
@@ -66,45 +78,40 @@ def currency_strategy(rate, buy_money, base_money, current_money=None):
 
 
 def get_data():
-    conf = configparser.ConfigParser()  # 类的实例化
-
-    cul_path = os.path.dirname(os.path.realpath(__file__))
-    path = os.path.join(cul_path, 'data.ini')
-    conf.read(path, encoding="utf-8")
-
-    rate = conf['okb-usdt']['rate']
-    buy_money = conf['okb-usdt']['buy_money']
-    base = conf['okb-usdt']['base']
-    top = int(conf['okb-usdt']['top'])
-    end = int(conf['okb-usdt']['end'])
+    rate = conf['symbol']['rate']
+    buy_money = conf['symbol']['buy_money']
+    base = conf['symbol']['base']
+    top = int(conf['symbol']['top'])
+    end = int(conf['symbol']['end'])
+    abc_id = int(conf['symbol']['abc_id'])
     lis_order = {}
 
     try:
         for i in range(0, top + end):
-            lis_order.setdefault(i, conf['okb-usdt-orderid'][f'{i}'])
+            x = i + abc_id
+            lis_order.setdefault(i, conf['symbol-orderid'][f'{x}'])
     except Exception as e:
         pass
-    return float(rate), float(buy_money), float(base), lis_order
+    return float(rate), float(buy_money), float(base), lis_order, top, end, abc_id
 
 
 def set_data(key, order):
-    conf = configparser.ConfigParser()
-    cul_path = os.path.dirname(os.path.realpath(__file__))
-    path = os.path.join(cul_path, 'data.ini')
-
-    if not os.path.exists(path):
-        # 如果配置文件不存在，则创建一个新的配置文件
-        with open(path, 'w') as config_file:
-            config_file.write('')
-
-    conf.read(path, encoding="utf-8")  # 读取配置文件
-
-    if 'okb-usdt-orderid' not in conf:
-        # 如果节不存在，则添加节
-        conf['okb-usdt-orderid'] = {}
-
-    conf['okb-usdt-orderid'][str(key)] = str(order)
+    conf['symbol-orderid'][str(key)] = str(order)
 
     # 往配置文件写入数据
-    with open(path, 'w') as config_file:
-        conf.write(config_file)  # 保存数据
+    with open(path, 'w', encoding="utf-8") as file:
+        conf.write(file)  # 保存数据
+
+
+def del_data(key):
+    conf.remove_option("symbol-orderid", key)
+    # 往配置文件写入数据
+    with open(path, 'w', encoding="utf-8") as file:
+        conf.write(file)  # 保存数据
+
+
+def update_data(session, key, values):
+    conf.set(session, key, values)
+    # 往配置文件写入数据
+    with open(path, 'w', encoding="utf-8") as file:
+        conf.write(file)  # 保存数据
