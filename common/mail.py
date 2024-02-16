@@ -10,7 +10,7 @@ def send_email(earnings, transfer_earnings):
     smtp_server = 'smtp.163.com'  # 网易邮箱的SMTP服务器地址
     smtp_port = 465  # 网易邮箱的SMTP服务器端口号
     smtp_username = 'fushangzxc@163.com'  # 发件人邮箱
-    smtp_password = 'TOBFQXYXYPGKGFQP'  # 发件人邮箱授权码
+    smtp_password = 'xxxxxxxxxx'  # 发件人邮箱授权码
 
     # 邮件内容的配置信息
     sender = 'fushangzxc@163.com'  # 发件人邮箱
